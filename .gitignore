@@ -1,1 +1,6 @@
 *.pptx
+*.log
+*.jou
+*.pb
+*.vcd
+./fir/xsim.dir
