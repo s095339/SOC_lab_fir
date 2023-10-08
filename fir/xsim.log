@@ -1,0 +1,41 @@
+#-----------------------------------------------------------
+# xsim v2022.1 (64-bit)
+# SW Build 3526262 on Mon Apr 18 15:47:01 MDT 2022
+# IP Build 3524634 on Mon Apr 18 20:55:01 MDT 2022
+# Start of session at: Sun Oct  8 11:35:35 2023
+# Process ID: 5446
+# Current directory: /home/ubuntu/SOC/lab-fir/fir
+# Command line: xsim -mode tcl -source {xsim.dir/fir_tb_elab/xsim_script.tcl}
+# Log file: /home/ubuntu/SOC/lab-fir/fir/xsim.log
+# Journal file: /home/ubuntu/SOC/lab-fir/fir/xsim.jou
+# Running On: ubuntu2004, OS: Linux, CPU Frequency: 3593.146 MHz, CPU Physical cores: 4, Host memory: 10588 MB
+#-----------------------------------------------------------
+source xsim.dir/fir_tb_elab/xsim_script.tcl
+# xsim {fir_tb_elab} -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+------------Start simulation-----------
+----Start the data input(AXI-Stream)----
+----Start the coefficient input(AXI-lite)----
+ Check Coefficient ...
+OK: exp =           0, rdata =           0
+ERROR: exp =         -10, rdata =           0
+ERROR: exp =          -9, rdata =           0
+ERROR: exp =          23, rdata =           0
+ERROR: exp =          56, rdata =           0
+ERROR: exp =          63, rdata =           0
+ERROR: exp =          56, rdata =           0
+ERROR: exp =          23, rdata =           0
+ERROR: exp =          -9, rdata =           0
+ERROR: exp =         -10, rdata =           0
+OK: exp =           0, rdata =           0
+ Tape programming done ...
+ Start FIR
+OK: exp =           0, rdata =           0
+------End the data input(AXI-Stream)------
+             9999995Simualtion Hang ....
+$finish called at time : 9999995 ns : File "/home/ubuntu/SOC/lab-fir/fir/tb/fir_tb.v" Line 215
+run: Time (s): cpu = 00:00:02 ; elapsed = 00:00:23 . Memory (MB): peak = 2851.340 ; gain = 0.000 ; free physical = 6419 ; free virtual = 9659
+exit
+INFO: xsimkernel Simulation Memory Usage: 109716 KB (Peak: 166988 KB), Simulation CPU Usage: 22670 ms
+INFO: [Common 17-206] Exiting xsim at Sun Oct  8 11:36:03 2023...
