@@ -71,6 +71,7 @@ localparam STAT_STORE_1_INPUT = 3'd1;
 localparam STAT_CAL = 3'd2;
 localparam STAT_FINISH = 3'd3;
 reg [3-1:0]state, next_state;
+wire one_input_finish = equal_10_out;
 // =====Axilite ctrl========= //
 //fsm of axilite
 localparam LITE_idle = 3'd0;
@@ -122,9 +123,41 @@ wire [8-1:0]reg_out;
 reg [8-1:0]config_reg_buff, config_reg_buff_next;
 wire ap_idle, ap_done, ap_start;
 
-// =====Axis-read ctrl======= //
-// =====Axis-write ctrl====== //
-// =====calculation unit===== //
+// =====Axis-out to fir_dataflow====== //
+wire axis_finish;
+wire [(pDATA_WIDTH-1):0] strm_data;
+wire strm_valid;
+
+
+// =====fir dataflow===== //
+// fir_dataflow_cfg_ctrl
+reg [7:0]fir_cfg_reg_in, fir_cfg_reg_mask;
+reg fir_cfg_reg_wen;
+//data ram ctrl
+wire [(pADDR_WIDTH-1):0]data_ram_addr;
+wire [(pDATA_WIDTH-1):0]data_ram_in;
+wire [(pDATA_WIDTH-1):0]data_ram_out;
+//data_ram addr ctrl
+reg data_ram_we;
+reg [4:0]data_ram_addr_start;
+reg [4:0]ata_ram_addr_end;
+//tap ram
+wire [(pADDR_WIDTH-1):0]tap_ram_addr;
+wire [(pDATA_WIDTH-1):0]tap_ram_in;
+//output handshake
+reg [(pDATA_WIDTH-1):0]fir_data;
+reg fir_valid;
+//operation_cnt
+reg [4:0]op_cnt;
+//equl_10
+wire equal_10_out;
+//dataflow
+reg [(pDATA_WIDTH-1):0]current_data_in,data_in;
+reg [(pDATA_WIDTH-1):0]mul_out,adder_out;
+//psum_buffer
+reg[(pDATA_WIDTH-1):0] psum_buffer, psum_buffer_out, psum_buffer_in;
+
+
 
 
 
@@ -137,16 +170,37 @@ FSM design:
 state
 0.idle  : (1)wait for coefficients(wait for axilite arvalid), if arvalid=1 go to state 1
           (2)wait for ap_start. If ap_start is set, go to state 1.
-1.store_1_input: wait for 1 data input from axis. If 1 input is received, go to state 2.
+1.store_1_input: clean ap_start and set ap_idle
+wait for 1 data input from axis. If 1 input is received, go to state 2.
 2.calculation: Do the fir calculation and output 1 data. if tlast==1 go to state 3. else go to state 1.
 3.finish: send axilite signal (ap_done, ap_idle) to testbench.
 */
-
+always@*
+    case(state)
+        STAT_IDLE:
+            if(ap_start)
+                next_state = STAT_STORE_1_INPUT;
+            else
+                next_state = STAT_IDLE;
+        STAT_STORE_1_INPUT:
+            next_state = STAT_CAL;
+        
+        STAT_CAL:
+        //TODO need modify
+            if(one_input_finish)
+                next_state = STAT_STORE_1_INPUT;
+            else 
+                next_state = STAT_CAL;
+        STAT_FINISH:
+            next_state = STAT_IDLE;
+        default:
+            next_state = STAT_IDLE;
+    endcase
 always@(posedge axis_clk or axis_rst_n)
     if(~axis_rst_n)
         state = STAT_IDLE;
     else
-        state = STAT_IDLE;
+        state = next_state;
 
 //******************************//
 // AxiLite Controller           //
@@ -178,7 +232,7 @@ always@*
         LITE_read:
             next_lite_state = LITE_idle;
         default:
-        next_lite_state = LITE_idle;
+            next_lite_state = LITE_idle;
     endcase
 always@(posedge axis_clk or negedge axis_rst_n)
     if(~axis_rst_n)
@@ -409,20 +463,23 @@ always@* begin
             tap_A_reg = config_tap_A;
             tap_Di_reg = config_tap_Di;
         end
-        /*
-        TODO: 這邊要改成讓dir_dataflow可以access tap_ram
+        
         STAT_STORE_1_INPUT:begin
-            tap_WE_reg = 
-            tap_A_reg = 
-            tap_Di_reg = 
+            tap_WE_reg = 1'b0;
+            tap_A_reg = {pADDR_WIDTH{1'b0}};
+            tap_Di_reg = {pDATA_WIDTH{1'b0}};
         end
         STAT_CAL:begin
-            
+            tap_WE_reg = 1'b0;
+            tap_A_reg = {pADDR_WIDTH{1'b0}};
+            tap_Di_reg = {pDATA_WIDTH{1'b0}};
         end
         STAT_FINISH:begin
-
+            tap_WE_reg = 1'b0;
+            tap_A_reg = {pADDR_WIDTH{1'b0}};
+            tap_Di_reg = {pDATA_WIDTH{1'b0}};
         end
-        */
+        
         default:begin
             tap_WE_reg = 0;
             tap_A_reg = 0;
@@ -440,21 +497,27 @@ always@*
         STAT_IDLE:
             // testbench can only write ap_start to 1, so the mask is always 00000001
             reg_wmask = 8'b0000_0001;
+        STAT_STORE_1_INPUT:
+            reg_wmask = fir_cfg_reg_mask;
+        STAT_CAL:
+            reg_wmask = fir_cfg_reg_mask;
+        STAT_FINISH:
+            reg_wmask = fir_cfg_reg_mask;
         default:
-            /*
-            TODO: 之後這邊要改成reg_wmask由fir_dataflow來給
-            */
-            reg_wmask = 0;
+            reg_wmask = 8'b0000_0000;
     endcase
 
 always@*
     case(state)
         STAT_IDLE:
             reg_wen = config_ctrl_reg_wen;
+        STAT_STORE_1_INPUT:
+            reg_wen = fir_cfg_reg_wen;
+        STAT_CAL:
+            reg_wen = fir_cfg_reg_wen;
+        STAT_FINISH:
+            reg_wen = fir_cfg_reg_wen;
         default:
-            /*
-            TODO: 之後這邊要改成說reg_wen由fir_dataflow來給
-            */
             reg_wen = 0;
     endcase
 
@@ -462,11 +525,14 @@ always@*
     case(state)
         STAT_IDLE:
             reg_in = config_ctrl_reg_in;
+        STAT_STORE_1_INPUT:
+            reg_in = fir_cfg_reg_in;
+        STAT_CAL:
+            reg_in = fir_cfg_reg_in;
+        STAT_FINISH:
+            reg_in = fir_cfg_reg_in;
         default:
-            /*
-            TODO: 之後這邊要改成reg_in由fir_dataflow來給
-            */
-            reg_in = 0;
+            reg_in = 8'd0;
     endcase
 //******************************//
 // Config_reg                   //
@@ -481,7 +547,7 @@ assign ap_idle = reg_out[2];
 integer NANDECODDA;
 always@(posedge axis_clk or negedge axis_rst_n)
     if(~axis_rst_n)
-        config_reg_buff <= 8'd0;
+        config_reg_buff <= 8'd4; //ap_idle = 0000_0100
     else
         if(reg_wen)
             for(NANDECODDA=0; NANDECODDA<8; NANDECODDA=NANDECODDA+1)
@@ -491,7 +557,29 @@ always@(posedge axis_clk or negedge axis_rst_n)
                     config_reg_buff[NANDECODDA] <= config_reg_buff[NANDECODDA];
         else
             config_reg_buff <= config_reg_buff;
+//******************************//
+// axis_ in                     //
+//******************************//
 
+axis_in axisin(
+    .tvalid(ss_tvalid),
+    .tdata(ss_tdata),
+    .tlast(ss_tlast),
+    .tready(ss_tready),
+
+    // axis_in <-> fir_dataflow
+    .strm_data(strm_data),
+    .strm_valid(strm_valid),
+    .fir_ready(1'b1),
+
+    //signal
+    .axis_finish(axis_finish), 
+    .ap_start(ap_start),
+
+    //clk rst
+    .clk(axis_clk),
+    .rst_n(axis_rst_n)
+);
 //******************************//
 // FIR Dataflow                 //
 //******************************//
@@ -504,10 +592,93 @@ tdata_in   :__|data|____________________________________________________________
 mem_cnt    :|0|1    |2    |3    |4    |5    |6    |7    |8   |9    |10    |0
 tap_in     :__|tap0 |tap1 |tap2 |tap3 |tap4 |tap5 |tap6 |tap7|tap8 |tap9  |tap10|__________________
 data_in    :__|dat0 |dat1 |dat2 |dat3 |dat4 |dat5 |dat6 |dat7|dat8 |dat9  |dat10|__________________
-WE         :__/▔▔\_______________________________________________________________________________
+WE         :/▔▔\_______________________________________________________________________________
 outvalid   :______________________________________________________________/▔▔\___________________
 ---------------------------------------------------------------------------------------------------------
 */
+// fir_dataflow_cfg_ctrl
+always@*
+    case(state)
+        STAT_IDLE:begin
+            fir_cfg_reg_in = 8'b0000_0000;
+            fir_cfg_reg_mask = 8'b0000_0000;
+            fir_cfg_reg_wen = 1'b0;
+        end
+        STAT_STORE_1_INPUT:begin
+            fir_cfg_reg_in = 8'b0000_0000;
+            fir_cfg_reg_mask = 8'b0000_0011;
+            fir_cfg_reg_wen = 1'b1;
+        end
+        STAT_CAL:begin
+            fir_cfg_reg_in = 8'b0000_0000;
+            fir_cfg_reg_mask = 8'b0000_0000;
+            fir_cfg_reg_wen = 1'b0;
+        end
+        STAT_FINISH:begin
+            fir_cfg_reg_in = 8'b0000_0110;
+            fir_cfg_reg_mask = 8'b0000_0110;
+            fir_cfg_reg_wen = 1'b1;
+        end
+        default:begin
+            fir_cfg_reg_in = 8'b0000_0000;
+            fir_cfg_reg_mask = 8'b0000_0000;
+            fir_cfg_reg_wen = 1'b0;
+        end
+    endcase
+// operation cnt 
+wire equal_10_out = (op_cnt == 5'd10)? 1'b1 : 1'b0; 
+always@(posedge axis_clk or negedge axis_rst_n)
+    if(~axis_rst_n)
+        op_cnt <= 5'd0;
+    else
+        case(state)
+            STAT_IDLE:
+                op_cnt<=0;
+            STAT_STORE_1_INPUT:
+                op_cnt<=op_cnt+5'd1;
+            STAT_CAL:
+                if(~equal_10_out)
+                    op_cnt<=op_cnt+5'd1;
+                else
+                    op_cnt<=5'd0;
+            STAT_FINISH:
+                op_cnt<=5'd0;
+            default:
+                op_cnt<=5'd0;
+        endcase
+//output
+always@(posedge axis_clk or negedge axis_rst_n)
+    if(~axis_rst_n)
+        fir_valid <= 1'b0;
+    else
+        fir_valid <= equal_10_out;
+
+//tap ram
+assign tap_ram_addr = (op_cnt<<2);
+assign tap_ram_in = tap_Do;
+//Data_ram_addr_ctrl
+always@(posedge axis_clk or negedge axis_rst_n)
+    if(~axis_rst_n)
+        data_ram_addr_start <= 5'd0;
+    else
+        if(equal_10_out)
+            if(data_ram_addr_start<5'd10)
+                data_ram_addr_start <= data_ram_addr_start;
+            else
+                data_ram_addr_start <= 5'd0;
+        else
+            data_ram_addr_start <= data_ram_addr_start;
+always@*
+    case(state)
+        STAT_STORE_1_INPUT:
+            data_ram_we = 1'b1;
+        default:
+            data_ram_we = 1'b0;
+    endcase
+//Data_ram
+assign data_ram_addr = {5'b0000,(op_cnt + data_ram_addr_start),2'b00};
+assign data_ram_out = data_Do;
+assign data_ram_in = data_Di;
 
 
 endmodule

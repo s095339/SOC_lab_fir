@@ -1,4 +1,5 @@
 # design sources
 ./rtl/fir.v
+./rtl/axis_in.v
 ../bram/bram11.v
 ../bram/bram12.v
