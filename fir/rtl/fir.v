@@ -106,19 +106,24 @@ reg[(pADDR_WIDTH-1):0] config_tap_A;
 reg[(pDATA_WIDTH-1):0] config_tap_Do;
 
 //config ctrl to cfg_reg_ctrl
-reg [8-1:0]config_ctrl_reg_out;
 wire config_ctrl_reg_wen;
-reg [8-1:0]config_ctrl_reg_in;
+wire [8-1:0]config_ctrl_reg_in;
 // =====taps_ram_ctrl======== //
 reg [3:0]               tap_WE_reg;
 reg [(pDATA_WIDTH-1):0] tap_Di_reg;
 reg [(pADDR_WIDTH-1):0] tap_A_reg;
+// =====Cfg_reg_ctrl=====//
+wire [8-1:0]config_ctrl_reg_out;
 
-
+// =====Config_reg=====//
+reg [8-1:0] reg_in, reg_wmask;
+reg reg_wen;
+wire [8-1:0]reg_out;
+reg [8-1:0]config_reg_buff, config_reg_buff_next;
+wire ap_idle, ap_done, ap_start;
 
 // =====Axis-read ctrl======= //
 // =====Axis-write ctrl====== //
-// =====memory ctrl========== //
 // =====calculation unit===== //
 
 
@@ -379,16 +384,15 @@ always@*
   
 //===destination: config_reg====
 //config_ctrl_reg_in
-always@*
-    config_ctrl_reg_in = w_data;
+assign config_ctrl_reg_in = w_data[8-1:0];
 //config_ctrl_reg_wen
 assign config_ctrl_reg_wen = (desti == 0)? W_EN:1'b0;
 //config_ctrl_reg_out
-    //寫在別的地方(cfg_reg_ctrl)
+    //寫在Cfg_reg_ctrl  
 
 //===config_ctrl to axilite
 //rdata
-assign r_data = (desti_delay)?config_tap_Do:32'd0; //這邊要寫config_ctrl_reg_out 但先這樣寫
+assign r_data = (desti_delay)?config_tap_Do:config_ctrl_reg_out; //這邊要寫config_ctrl_reg_out 但先這樣寫
 
 
 //******************************//
@@ -406,6 +410,7 @@ always@* begin
             tap_Di_reg = config_tap_Di;
         end
         /*
+        TODO: 這邊要改成讓dir_dataflow可以access tap_ram
         STAT_STORE_1_INPUT:begin
             tap_WE_reg = 
             tap_A_reg = 
@@ -425,6 +430,67 @@ always@* begin
         end
     endcase
 end
+//******************************//
+// Cfg_reg_ctrl                 //
+//******************************//
+
+assign config_ctrl_reg_out = reg_out;
+always@*
+    case(state)
+        STAT_IDLE:
+            // testbench can only write ap_start to 1, so the mask is always 00000001
+            reg_wmask = 8'b0000_0001;
+        default:
+            /*
+            TODO: 之後這邊要改成reg_wmask由fir_dataflow來給
+            */
+            reg_wmask = 0;
+    endcase
+
+always@*
+    case(state)
+        STAT_IDLE:
+            reg_wen = config_ctrl_reg_wen;
+        default:
+            /*
+            TODO: 之後這邊要改成說reg_wen由fir_dataflow來給
+            */
+            reg_wen = 0;
+    endcase
+
+always@*
+    case(state)
+        STAT_IDLE:
+            reg_in = config_ctrl_reg_in;
+        default:
+            /*
+            TODO: 之後這邊要改成reg_in由fir_dataflow來給
+            */
+            reg_in = 0;
+    endcase
+//******************************//
+// Config_reg                   //
+//******************************//
+
+assign reg_out = config_reg_buff;
+// block level protocal
+assign ap_start = reg_out[0];
+assign ap_done = reg_out[1];
+assign ap_idle = reg_out[2];
+//store the config state
+integer NANDECODDA;
+always@(posedge axis_clk or negedge axis_rst_n)
+    if(~axis_rst_n)
+        config_reg_buff <= 8'd0;
+    else
+        if(reg_wen)
+            for(NANDECODDA=0; NANDECODDA<8; NANDECODDA=NANDECODDA+1)
+                if(reg_wmask[NANDECODDA])
+                    config_reg_buff[NANDECODDA] <= reg_in[NANDECODDA];
+                else
+                    config_reg_buff[NANDECODDA] <= config_reg_buff[NANDECODDA];
+        else
+            config_reg_buff <= config_reg_buff;
 
 //******************************//
 // FIR Dataflow                 //

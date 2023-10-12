@@ -8,3 +8,4 @@ fir:
 #my user code
 clean:
 	rm -rf xsim.dir/ *.log *.pb *.jou *.wdb
+

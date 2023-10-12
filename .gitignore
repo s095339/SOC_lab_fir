@@ -5,9 +5,9 @@
 *.vcd
 *.wdb
 
-./fir/xsim.dir
+./fir/xsim.dir/
 ./fir/xsim.dir/*.*
-
+xsim.dir/
 ./fir/*.log
 ./fir/*.jou
 ./fir/*.pb
