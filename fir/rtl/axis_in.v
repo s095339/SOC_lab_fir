@@ -17,7 +17,7 @@ module axis_in
     input wire fir_ready,
 
     //signal
-    output wire axis_finish, 
+    output reg axis_finish, 
     input wire ap_start,
 
     //clk rst
@@ -50,8 +50,8 @@ always@*
             else
                 next_state = STRM_IDLE;
         STRM_WORK:
-            if(tlast)
-                next_state = STRM_LAST;
+            if(tready && tlast)
+                next_state = STRM_IDLE;
             else
                 next_state = STRM_WORK;
         STRM_LAST:
@@ -79,8 +79,6 @@ always@*
             tready_reg = ap_start;
         STRM_WORK:
             tready_reg = fir_ready; // & strm_valid;
-        STRM_LAST:
-            tready_reg = 1'b0;
         default:
             tready_reg = 1'b0;
     endcase
@@ -124,9 +122,16 @@ always@(posedge clk or negedge rst_n)
 
 
 //=====signal=====
-assign axis_finish = (state == STRM_LAST)? 1'b1: 1'b0;
 
 
+always@(posedge clk or negedge rst_n)
+    if(~rst_n)
+        axis_finish <= 1'b0;
+    else
+        if(tready)
+            axis_finish <= tlast; 
+        else
+            axis_finish <= 1'b0;
 
 
 endmodule
