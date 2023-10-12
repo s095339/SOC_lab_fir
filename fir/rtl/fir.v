@@ -71,7 +71,7 @@ localparam STAT_STORE_1_INPUT = 3'd1;
 localparam STAT_CAL = 3'd2;
 localparam STAT_FINISH = 3'd3;
 reg [3-1:0]state, next_state;
-wire one_input_finish = equal_10_out;
+wire one_input_finish;
 // =====Axilite ctrl========= //
 //fsm of axilite
 localparam LITE_idle = 3'd0;
@@ -139,25 +139,29 @@ wire [(pDATA_WIDTH-1):0]data_ram_in;
 wire [(pDATA_WIDTH-1):0]data_ram_out;
 //data_ram addr ctrl
 reg data_ram_we;
+wire [4:0]data_ram_addr_pre;
+wire [4:0]data_ram_addr_plus;
 reg [4:0]data_ram_addr_start;
 reg [4:0]ata_ram_addr_end;
 //tap ram
 wire [(pADDR_WIDTH-1):0]tap_ram_addr;
-wire [(pDATA_WIDTH-1):0]tap_ram_in;
+wire signed[(pDATA_WIDTH-1):0]tap_ram_out;
 //output handshake
-reg [(pDATA_WIDTH-1):0]fir_data;
+wire [(pDATA_WIDTH-1):0]fir_data;
+//input handshake
+wire fir_ready;
 reg fir_valid;
 //operation_cnt
-reg [4:0]op_cnt;
+reg [4:0]op_cnt,op_cnt_next,op_end;
 //equl_10
 wire equal_10_out;
 //dataflow
-reg [(pDATA_WIDTH-1):0]current_data_in,data_in;
-reg [(pDATA_WIDTH-1):0]mul_out,adder_out;
+reg [(pDATA_WIDTH-1):0]current_data_in;
+wire signed[(pDATA_WIDTH-1):0]data_in;
+wire signed[(pDATA_WIDTH-1):0]mul_out,adder_out;
 //psum_buffer
-reg[(pDATA_WIDTH-1):0] psum_buffer, psum_buffer_out, psum_buffer_in;
-
-
+reg[(pDATA_WIDTH-1):0] psum_buffer, psum_buffer_in;
+wire[(pDATA_WIDTH-1):0]psum_buffer_out;
 
 
 
@@ -202,6 +206,7 @@ always@(posedge axis_clk or axis_rst_n)
     else
         state = next_state;
 
+assign one_input_finish = equal_10_out;
 //******************************//
 // AxiLite Controller           //
 //******************************//
@@ -466,17 +471,17 @@ always@* begin
         
         STAT_STORE_1_INPUT:begin
             tap_WE_reg = 1'b0;
-            tap_A_reg = {pADDR_WIDTH{1'b0}};
+            tap_A_reg = tap_ram_addr;
             tap_Di_reg = {pDATA_WIDTH{1'b0}};
         end
         STAT_CAL:begin
             tap_WE_reg = 1'b0;
-            tap_A_reg = {pADDR_WIDTH{1'b0}};
+            tap_A_reg = tap_ram_addr;
             tap_Di_reg = {pDATA_WIDTH{1'b0}};
         end
         STAT_FINISH:begin
             tap_WE_reg = 1'b0;
-            tap_A_reg = {pADDR_WIDTH{1'b0}};
+            tap_A_reg = tap_ram_addr;
             tap_Di_reg = {pDATA_WIDTH{1'b0}};
         end
         
@@ -570,7 +575,7 @@ axis_in axisin(
     // axis_in <-> fir_dataflow
     .strm_data(strm_data),
     .strm_valid(strm_valid),
-    .fir_ready(1'b1),
+    .fir_ready(fir_ready),
 
     //signal
     .axis_finish(axis_finish), 
@@ -592,11 +597,11 @@ tdata_in   :__|data|____________________________________________________________
 mem_cnt    :|0|1    |2    |3    |4    |5    |6    |7    |8   |9    |10    |0
 tap_in     :__|tap0 |tap1 |tap2 |tap3 |tap4 |tap5 |tap6 |tap7|tap8 |tap9  |tap10|__________________
 data_in    :__|dat0 |dat1 |dat2 |dat3 |dat4 |dat5 |dat6 |dat7|dat8 |dat9  |dat10|__________________
-WE         :/▔▔\_______________________________________________________________________________
+WE         :/▔\_______________________________________________________________________________
 outvalid   :______________________________________________________________/▔▔\___________________
 ---------------------------------------------------------------------------------------------------------
 */
-// fir_dataflow_cfg_ctrl
+//========== fir_dataflow_cfg_ctrl==========
 always@*
     case(state)
         STAT_IDLE:begin
@@ -606,7 +611,7 @@ always@*
         end
         STAT_STORE_1_INPUT:begin
             fir_cfg_reg_in = 8'b0000_0000;
-            fir_cfg_reg_mask = 8'b0000_0011;
+            fir_cfg_reg_mask = 8'b0000_0101;
             fir_cfg_reg_wen = 1'b1;
         end
         STAT_CAL:begin
@@ -625,45 +630,60 @@ always@*
             fir_cfg_reg_wen = 1'b0;
         end
     endcase
-// operation cnt 
-wire equal_10_out = (op_cnt == 5'd10)? 1'b1 : 1'b0; 
+// ==========operation cnt ==========
+assign equal_10_out = (op_cnt == 10)? 1'b1 : 1'b0; 
+always@(posedge axis_clk or negedge axis_rst_n)
+    if(~axis_rst_n)
+        op_end <= 5'd0;
+    else
+        if( strm_valid && (state == STAT_STORE_1_INPUT || state == STAT_CAL) )
+            if(op_end < 5'd10)
+                op_end <= op_end + 5'd1;
+            else
+                op_end <= 5'd10;
+        else
+            op_end <= op_end;
 always@(posedge axis_clk or negedge axis_rst_n)
     if(~axis_rst_n)
         op_cnt <= 5'd0;
     else
-        case(state)
-            STAT_IDLE:
-                op_cnt<=0;
-            STAT_STORE_1_INPUT:
-                op_cnt<=op_cnt+5'd1;
-            STAT_CAL:
-                if(~equal_10_out)
-                    op_cnt<=op_cnt+5'd1;
-                else
-                    op_cnt<=5'd0;
-            STAT_FINISH:
-                op_cnt<=5'd0;
-            default:
-                op_cnt<=5'd0;
-        endcase
-//output
+        op_cnt <= op_cnt_next;
+
+always@*
+    case(state)
+        STAT_IDLE:
+            op_cnt_next = 0;
+        STAT_STORE_1_INPUT:
+            op_cnt_next = op_cnt+5'd1;
+        STAT_CAL:
+            if(~equal_10_out)
+                op_cnt_next = op_cnt+5'd1;
+            else
+                op_cnt_next = 5'd0;
+        STAT_FINISH:
+            op_cnt_next = 5'd0;
+        default:
+            op_cnt_next = 5'd0;
+    endcase
+//==========output  handshake==========
 always@(posedge axis_clk or negedge axis_rst_n)
     if(~axis_rst_n)
         fir_valid <= 1'b0;
     else
         fir_valid <= equal_10_out;
-
-//tap ram
+//==========input handshake==========
+assign fir_ready = equal_10_out & ~strm_valid;
+//==========tap ram==========
 assign tap_ram_addr = (op_cnt<<2);
-assign tap_ram_in = tap_Do;
-//Data_ram_addr_ctrl
+assign tap_ram_out = tap_Do;
+//==========Data_ram_addr_ctrl==========
 always@(posedge axis_clk or negedge axis_rst_n)
     if(~axis_rst_n)
         data_ram_addr_start <= 5'd0;
     else
         if(equal_10_out)
             if(data_ram_addr_start<5'd10)
-                data_ram_addr_start <= data_ram_addr_start;
+                data_ram_addr_start <= data_ram_addr_start + 5'd1;
             else
                 data_ram_addr_start <= 5'd0;
         else
@@ -675,10 +695,46 @@ always@*
         default:
             data_ram_we = 1'b0;
     endcase
-//Data_ram
-assign data_ram_addr = {5'b0000,(op_cnt + data_ram_addr_start),2'b00};
-assign data_ram_out = data_Do;
-assign data_ram_in = data_Di;
 
+assign data_ram_addr_pre = op_cnt + data_ram_addr_start;
+assign data_ram_addr_plus = (data_ram_addr_pre >= 11)? data_ram_addr_pre-5'd11 : data_ram_addr_pre;
+//==========Data_ram=============
+assign data_ram_addr = {5'b0000,data_ram_addr_plus,2'b00}; // << 2
+assign data_A = (state == STAT_IDLE )? tap_A:data_ram_addr;
+assign data_ram_out = data_Do;
+assign data_Di = (state == STAT_IDLE )? {pDATA_WIDTH{1'b0}} : data_ram_in;
+assign data_WE = (state == STAT_IDLE )? tap_WE:{4{data_ram_we}};
+assign data_EN = 1'b1;
+//===========dataflow==============
+//x[t] current input
+assign data_ram_in = strm_data;
+always@(posedge axis_clk or negedge axis_rst_n)
+    if(~axis_rst_n)
+        current_data_in <= {pDATA_WIDTH{1'b0}};
+    else
+        if(strm_valid)
+            current_data_in <= strm_data;
+        else
+            current_data_in <= {pDATA_WIDTH{1'b0}};
+assign data_in = (op_cnt == 5'd1)? current_data_in:data_ram_out;
+assign mul_out = tap_ram_out * data_in;
+assign adder_out = mul_out + psum_buffer_out;
+//psum_buffer
+assign psum_buffer_out = psum_buffer;
+always@(posedge axis_clk or negedge axis_rst_n)
+    if(~axis_rst_n)
+        psum_buffer <= {pDATA_WIDTH{1'b0}};
+    else
+        psum_buffer <= psum_buffer_in;
+always@*
+    case(state)
+        STAT_STORE_1_INPUT:
+            psum_buffer_in = {pDATA_WIDTH{1'b0}};
+        STAT_CAL:
+            psum_buffer_in = adder_out;
+        default:
+            psum_buffer_in = {pDATA_WIDTH{1'b0}};
+    endcase
+assign fir_data = adder_out;
 
 endmodule
