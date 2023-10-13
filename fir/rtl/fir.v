@@ -139,20 +139,21 @@ wire [(pDATA_WIDTH-1):0]data_ram_in;
 wire [(pDATA_WIDTH-1):0]data_ram_out;
 //data_ram addr ctrl
 reg data_ram_we;
-wire [4:0]data_ram_addr_pre;
-wire [4:0]data_ram_addr_plus;
-reg [4:0]data_ram_addr_start;
-reg [4:0]ata_ram_addr_end;
+wire signed[4:0]data_ram_addr_pre;
+wire signed[4:0]data_ram_addr_plus;
+reg signed[4:0]data_ram_addr_start;
+reg signed[4:0]ata_ram_addr_end;
 //tap ram
 wire [(pADDR_WIDTH-1):0]tap_ram_addr;
 wire signed[(pDATA_WIDTH-1):0]tap_ram_out;
 //output handshake
 wire [(pDATA_WIDTH-1):0]fir_data;
+reg fir_last;
 //input handshake
 wire fir_ready;
 reg fir_valid;
 //operation_cnt
-reg [4:0]op_cnt,op_cnt_next,op_end;
+reg signed[4:0]op_cnt,op_cnt_next,op_end;
 //equl_10
 wire equal_10_out;
 //dataflow
@@ -162,7 +163,8 @@ wire signed[(pDATA_WIDTH-1):0]mul_out,adder_out;
 //psum_buffer
 reg[(pDATA_WIDTH-1):0] psum_buffer, psum_buffer_in;
 wire[(pDATA_WIDTH-1):0]psum_buffer_out;
-
+//fsm signal
+reg last_data_processing,last_data_processing_next;
 
 
 
@@ -191,7 +193,9 @@ always@*
         
         STAT_CAL:
         //TODO need modify
-            if(one_input_finish)
+            if(one_input_finish & last_data_processing)
+                next_state = STAT_FINISH;
+            else if(one_input_finish & ~last_data_processing)
                 next_state = STAT_STORE_1_INPUT;
             else 
                 next_state = STAT_CAL;
@@ -605,8 +609,8 @@ outvalid   :______________________________________________________________/â–”â–
 always@*
     case(state)
         STAT_IDLE:begin
-            fir_cfg_reg_in = 8'b0000_0000;
-            fir_cfg_reg_mask = 8'b0000_0000;
+            fir_cfg_reg_in = 8'b0000_0100;
+            fir_cfg_reg_mask = 8'b0000_0100;
             fir_cfg_reg_wen = 1'b0;
         end
         STAT_STORE_1_INPUT:begin
@@ -671,6 +675,14 @@ always@(posedge axis_clk or negedge axis_rst_n)
         fir_valid <= 1'b0;
     else
         fir_valid <= equal_10_out;
+always@(posedge axis_clk or negedge axis_rst_n)
+    if(~axis_rst_n)
+        fir_last <= 1'b0;
+    else
+        if(last_data_processing & one_input_finish)
+            fir_last <= 1'b1;
+        else
+            fir_last <= 1'b0;
 //==========input handshake==========
 assign fir_ready = equal_10_out & ~strm_valid;
 //==========tap ram==========
@@ -696,14 +708,18 @@ always@*
             data_ram_we = 1'b0;
     endcase
 
-assign data_ram_addr_pre = op_cnt + data_ram_addr_start;
-assign data_ram_addr_plus = (data_ram_addr_pre >= 11)? data_ram_addr_pre-5'd11 : data_ram_addr_pre;
+assign data_ram_addr_pre = data_ram_addr_start - op_cnt;
+assign data_ram_addr_plus = (data_ram_addr_pre <0)? (data_ram_addr_pre+5'd11) : data_ram_addr_pre;
 //==========Data_ram=============
 assign data_ram_addr = {5'b0000,data_ram_addr_plus,2'b00}; // << 2
-assign data_A = (state == STAT_IDLE )? tap_A:data_ram_addr;
 assign data_ram_out = data_Do;
+assign data_A = (state == STAT_IDLE )? tap_A:data_ram_addr;
+//assign data_A = data_ram_addr;
 assign data_Di = (state == STAT_IDLE )? {pDATA_WIDTH{1'b0}} : data_ram_in;
+//assign data_Di = data_ram_in;
 assign data_WE = (state == STAT_IDLE )? tap_WE:{4{data_ram_we}};
+//assign data_WE = {4{data_ram_we}};
+
 assign data_EN = 1'b1;
 //===========dataflow==============
 //x[t] current input
@@ -716,7 +732,8 @@ always@(posedge axis_clk or negedge axis_rst_n)
             current_data_in <= strm_data;
         else
             current_data_in <= {pDATA_WIDTH{1'b0}};
-assign data_in = (op_cnt == 5'd1)? current_data_in:data_ram_out;
+assign data_in = (op_cnt == 5'd1)? current_data_in:
+                 (op_cnt <= op_end)?data_ram_out:{pDATA_WIDTH{1'b0}};
 assign mul_out = tap_ram_out * data_in;
 assign adder_out = mul_out + psum_buffer_out;
 //psum_buffer
@@ -736,5 +753,33 @@ always@*
             psum_buffer_in = {pDATA_WIDTH{1'b0}};
     endcase
 assign fir_data = adder_out;
+//fsm signal
+always@(posedge axis_clk or negedge axis_rst_n)
+    if(~axis_rst_n)
+        last_data_processing <= 1'b0;
+    else
+        last_data_processing <= last_data_processing_next;
+always@*
+    if (axis_finish)
+        last_data_processing_next = 1'b1;
+    else if(one_input_finish)
+        last_data_processing_next = 1'b0;
+    else
+        last_data_processing_next = last_data_processing;
 
+//=====axis_out=====
+axis_out axisout(
+    .fir_data(fir_data),
+    .fir_valid(fir_valid),
+    .fir_last(fir_last),
+
+    .tdata(sm_tdata),
+    .tvalid(sm_tvalid),
+    .tlast(sm_tlast),
+
+    .tready(sm_tready),
+
+    .clk(axis_clk),
+    .rst_n(axis_rst_n)
+);
 endmodule
