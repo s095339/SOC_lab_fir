@@ -712,10 +712,14 @@ assign data_ram_addr_pre = data_ram_addr_start - op_cnt;
 assign data_ram_addr_plus = (data_ram_addr_pre <0)? (data_ram_addr_pre+5'd11) : data_ram_addr_pre;
 //==========Data_ram=============
 assign data_ram_addr = {5'b0000,data_ram_addr_plus,2'b00}; // << 2
-assign data_A = (state == STAT_IDLE )? tap_A:data_ram_addr;
 assign data_ram_out = data_Do;
+assign data_A = (state == STAT_IDLE )? tap_A:data_ram_addr;
+//assign data_A = data_ram_addr;
 assign data_Di = (state == STAT_IDLE )? {pDATA_WIDTH{1'b0}} : data_ram_in;
+//assign data_Di = data_ram_in;
 assign data_WE = (state == STAT_IDLE )? tap_WE:{4{data_ram_we}};
+//assign data_WE = {4{data_ram_we}};
+
 assign data_EN = 1'b1;
 //===========dataflow==============
 //x[t] current input
@@ -728,7 +732,8 @@ always@(posedge axis_clk or negedge axis_rst_n)
             current_data_in <= strm_data;
         else
             current_data_in <= {pDATA_WIDTH{1'b0}};
-assign data_in = (op_cnt == 5'd1)? current_data_in:data_ram_out;
+assign data_in = (op_cnt == 5'd1)? current_data_in:
+                 (op_cnt <= op_end)?data_ram_out:{pDATA_WIDTH{1'b0}};
 assign mul_out = tap_ram_out * data_in;
 assign adder_out = mul_out + psum_buffer_out;
 //psum_buffer
