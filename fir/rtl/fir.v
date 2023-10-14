@@ -220,11 +220,11 @@ always@*
         default:
             next_state = STAT_IDLE;
     endcase
-always@(posedge axis_clk or axis_rst_n)
+always@(posedge axis_clk or negedge axis_rst_n)
     if(~axis_rst_n)
-        state = STAT_IDLE;
+        state <= STAT_IDLE;
     else
-        state = next_state;
+        state <= next_state;
 
 assign one_input_finish = equal_10_out;
 //******************************//
@@ -384,7 +384,7 @@ always@(posedge axis_clk or negedge axis_rst_n)
                 else
                     arready_reg <= 1'b0;
             default:
-                awready_reg <= 1'b0;
+                arready_reg <= 1'b0;
         endcase
 always@*
     if(~axis_rst_n)

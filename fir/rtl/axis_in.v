@@ -89,12 +89,12 @@ always@(posedge clk or negedge rst_n)
     else
         case(state)
             STRM_IDLE:
-                if(tready)
+                if(tready & tvalid)
                     strm_data<=tdata;
                 else
                     strm_data<={pDATA_WIDTH{1'b0}};
             STRM_WORK:
-                if(tready)
+                if(tready & tvalid)
                     strm_data<=tdata;
                 else
                     strm_data<={pDATA_WIDTH{1'b0}};
