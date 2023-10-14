@@ -90,6 +90,7 @@ reg arready_reg, rvalid_reg;
 reg [(pADDR_WIDTH-1):0] araddr_buf;
 //axilite write module
 reg awready_reg,wready_reg;
+reg awready_reg_next, wready_reg_next;
 reg [(pADDR_WIDTH-1):0] awaddr_buf;
 reg [(pDATA_WIDTH-1):0] wdata_buf;
 //axilite to config_ctrl module
@@ -308,28 +309,34 @@ always@(posedge axis_clk or negedge axis_rst_n)
     if(~axis_rst_n)
         awready_reg <= 1'b0;
     else
-        case(lite_state)
-            LITE_idle:
-                if(awvalid)
-                    awready_reg <= 1'b1;
-                else
-                    awready_reg <= awready_reg;
-            default:
-                awready_reg <= 1'b0;
-        endcase
+        awready_reg <= awready_reg_next;
+always@(*)
+    case(lite_state)
+        LITE_idle:
+            if(awvalid)
+                awready_reg_next = 1'b1;
+            else
+                awready_reg_next = awready_reg;
+        default:
+            awready_reg_next = 1'b0;
+    endcase
+
 always@(posedge axis_clk or negedge axis_rst_n)
     if(~axis_rst_n)
         wready_reg <=1'b0;
     else
-        case(lite_state)
-            LITE_idle:
-                if(wvalid)
-                    wready_reg <= 1'b1;
-                else
-                    wready_reg <= wready_reg;
-            default:
-                wready_reg <= 1'b0;
-        endcase
+        wready_reg<=wready_reg_next;
+
+always@*
+    case(lite_state)
+        LITE_idle:
+            if(wvalid)
+                wready_reg_next = 1'b1;
+            else
+                wready_reg_next = wready_reg;
+        default:
+            wready_reg_next = 1'b0;
+    endcase
 //data_addr block
 always@(posedge axis_clk or negedge axis_rst_n)
     if(~axis_rst_n)
@@ -761,7 +768,10 @@ assign data_WE = (state == STAT_IDLE )? tap_WE:{4{data_ram_we}};
 assign data_EN = 1'b1;
 //===========dataflow==============
 //x[t] current input
+
+
 assign data_ram_in = strm_data;
+
 always@(posedge axis_clk or negedge axis_rst_n)
     if(~axis_rst_n)
         current_data_in <= {pDATA_WIDTH{1'b0}};
@@ -770,8 +780,13 @@ always@(posedge axis_clk or negedge axis_rst_n)
             current_data_in <= strm_data;
         else
             current_data_in <= {pDATA_WIDTH{1'b0}};
+
+
 assign data_in = (op_cnt == 5'd1)? current_data_in:
                  (op_cnt <= op_end)?data_ram_out:{pDATA_WIDTH{1'b0}};
+
+
+
 assign mul_out = tap_ram_out * data_in;
 assign adder_out = mul_out + psum_buffer_out;
 //psum_buffer

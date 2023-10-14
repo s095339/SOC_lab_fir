@@ -49,7 +49,6 @@ module fir_tb
     reg                         axis_clk;
     reg                         axis_rst_n;
 
-
 // ram for tap
     wire [3:0]               tap_WE;
     wire                     tap_EN;
@@ -65,7 +64,7 @@ module fir_tb
     wire [(pDATA_WIDTH-1):0] data_Do;
 
 
-
+    reg error_coef;
     fir fir_DUT(
         .awready(awready),
         .wready(wready),
@@ -88,7 +87,6 @@ module fir_tb
         .sm_tdata(sm_tdata),
         .sm_tlast(sm_tlast),
 
-        
         // ram for tap
         .tap_WE(tap_WE),
         .tap_EN(tap_EN),
@@ -105,11 +103,10 @@ module fir_tb
 
         .axis_clk(axis_clk),
         .axis_rst_n(axis_rst_n)
-        
+
         );
     
     // RAM for tap
-    
     bram11 tap_RAM (
         .CLK(axis_clk),
         .WE(tap_WE),
@@ -128,13 +125,13 @@ module fir_tb
         .A(data_A),
         .Do(data_Do)
     );
-    
+
     reg signed [(pDATA_WIDTH-1):0] Din_list[0:(Data_Num-1)];
     reg signed [(pDATA_WIDTH-1):0] golden_list[0:(Data_Num-1)];
 
     initial begin
         $dumpfile("fir.vcd");
-        $dumpvars("+all");
+        $dumpvars();
     end
 
 
@@ -145,23 +142,20 @@ module fir_tb
         end
     end
 
-
-    // set reset signal
     initial begin
         axis_rst_n = 0;
         @(posedge axis_clk); @(posedge axis_clk);
         axis_rst_n = 1;
     end
-    //load data
+
     reg [31:0]  data_length;
     integer Din, golden, input_data, golden_data, m;
     initial begin
         data_length = 0;
-        Din = $fopen("./samples_triangular_wave.dat","r");
-        golden = $fopen("./out_gold.dat","r");
+        Din = $fopen("/home/ubuntu/m111061549/SOC/SOC_lab_fir/fir/samples_triangular_wave.dat","r");
+        golden = $fopen("/home/ubuntu/m111061549/SOC/SOC_lab_fir/fir/out_gold.dat","r");
         for(m=0;m<Data_Num;m=m+1) begin
-            // load data and golden into an array
-            input_data = $fscanf(Din,"%d", Din_list[m]); 
+            input_data = $fscanf(Din,"%d", Din_list[m]);
             golden_data = $fscanf(golden,"%d", golden_list[m]);
             data_length = data_length + 1;
         end
@@ -175,15 +169,13 @@ module fir_tb
         for(i=0;i<(data_length-1);i=i+1) begin
             ss_tlast = 0; ss(Din_list[i]);
         end
-        config_read_check(12'h00, 32'h00, 32'h0000_000f); // wait for idle = 0 ())
+        config_read_check(12'h00, 32'h00, 32'h0000_000f); // check idle = 0
         ss_tlast = 1; ss(Din_list[(Data_Num-1)]);
         $display("------End the data input(AXI-Stream)------");
     end
 
-    // check output when finish
     integer k;
     reg error;
-    reg error_coef;
     reg status_error;
     initial begin
         error = 0; status_error = 0;
@@ -231,13 +223,11 @@ module fir_tb
         coef[10] =  32'd0;
     end
 
-    //send coef
-    //reg error_coef;
+    
     initial begin
         error_coef = 0;
         $display("----Start the coefficient input(AXI-lite)----");
         config_write(12'h10, data_length);
-        // send tap to fir 
         for(k=0; k< Tape_Num; k=k+1) begin
             config_write(12'h20+4*k, coef[k]);
         end
@@ -253,7 +243,7 @@ module fir_tb
         @(posedge axis_clk) config_write(12'h00, 32'h0000_0001);    // ap_start = 1
         $display("----End the coefficient input(AXI-lite)----");
     end
-    // for Configuration Register Access Protocol
+
     task config_write;
         input [11:0]    addr;
         input [31:0]    data;
@@ -320,4 +310,3 @@ module fir_tb
         end
     endtask
 endmodule
-
