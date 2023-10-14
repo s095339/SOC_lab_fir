@@ -70,8 +70,11 @@ localparam STAT_IDLE = 3'd0;
 localparam STAT_STORE_1_INPUT = 3'd1;
 localparam STAT_CAL = 3'd2;
 localparam STAT_FINISH = 3'd3;
+localparam STAT_AP_DONE = 3'd4;
+localparam STAT_AP_IDLE = 3'd5;
 reg [3-1:0]state, next_state;
 wire one_input_finish;
+reg flag;
 // =====Axilite ctrl========= //
 //fsm of axilite
 localparam LITE_idle = 3'd0;
@@ -200,7 +203,20 @@ always@*
             else 
                 next_state = STAT_CAL;
         STAT_FINISH:
-            next_state = STAT_IDLE;
+            if(rvalid) // wait for testbench checking ap_done
+                next_state = STAT_AP_DONE;
+            else
+                next_state =  STAT_FINISH;
+        STAT_AP_DONE:
+            if(rvalid)
+                next_state = STAT_AP_IDLE;
+            else
+                next_state = STAT_AP_DONE;
+        STAT_AP_IDLE:
+            if(rvalid)
+                next_state = STAT_IDLE;
+            else
+                next_state = STAT_AP_IDLE;
         default:
             next_state = STAT_IDLE;
     endcase
@@ -512,6 +528,10 @@ always@*
             reg_wmask = fir_cfg_reg_mask;
         STAT_FINISH:
             reg_wmask = fir_cfg_reg_mask;
+        STAT_AP_DONE:
+            reg_wmask = fir_cfg_reg_mask;
+        STAT_AP_IDLE:
+            reg_wmask = fir_cfg_reg_mask;
         default:
             reg_wmask = 8'b0000_0000;
     endcase
@@ -526,6 +546,10 @@ always@*
             reg_wen = fir_cfg_reg_wen;
         STAT_FINISH:
             reg_wen = fir_cfg_reg_wen;
+        STAT_AP_DONE:
+            reg_wen = fir_cfg_reg_wen;
+        STAT_AP_IDLE:
+            reg_wen = fir_cfg_reg_wen;
         default:
             reg_wen = 0;
     endcase
@@ -539,6 +563,10 @@ always@*
         STAT_CAL:
             reg_in = fir_cfg_reg_in;
         STAT_FINISH:
+            reg_in = fir_cfg_reg_in;
+        STAT_AP_DONE:
+            reg_in = fir_cfg_reg_in;
+        STAT_AP_IDLE:
             reg_in = fir_cfg_reg_in;
         default:
             reg_in = 8'd0;
@@ -610,7 +638,7 @@ always@*
     case(state)
         STAT_IDLE:begin
             fir_cfg_reg_in = 8'b0000_0100;
-            fir_cfg_reg_mask = 8'b0000_0100;
+            fir_cfg_reg_mask = 8'b0000_0110;
             fir_cfg_reg_wen = 1'b0;
         end
         STAT_STORE_1_INPUT:begin
@@ -624,7 +652,17 @@ always@*
             fir_cfg_reg_wen = 1'b0;
         end
         STAT_FINISH:begin
-            fir_cfg_reg_in = 8'b0000_0110;
+            fir_cfg_reg_in = 8'b0000_0000;
+            fir_cfg_reg_mask = 8'b0000_0000;
+            fir_cfg_reg_wen = 1'b1;
+        end
+        STAT_AP_DONE:begin //clean ap_done, set ap_idle
+            fir_cfg_reg_in = 8'b0000_0010;
+            fir_cfg_reg_mask = 8'b0000_0010;
+            fir_cfg_reg_wen = 1'b1;
+        end
+        STAT_AP_IDLE:begin
+            fir_cfg_reg_in = 8'b0000_0100;
             fir_cfg_reg_mask = 8'b0000_0110;
             fir_cfg_reg_wen = 1'b1;
         end
