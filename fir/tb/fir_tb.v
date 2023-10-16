@@ -64,7 +64,7 @@ module fir_tb
     wire [(pDATA_WIDTH-1):0] data_Do;
 
 
-    reg error_coef;
+
     fir fir_DUT(
         .awready(awready),
         .wready(wready),
@@ -163,19 +163,21 @@ module fir_tb
 
     integer i;
     initial begin
+        while(!axis_rst_n) @(posedge axis_clk);
         $display("------------Start simulation-----------");
-        ss_tvalid = 0;
+        ss_tvalid = 0; ss_tlast = 0; 
         $display("----Start the data input(AXI-Stream)----");
-        for(i=0;i<(data_length-1);i=i+1) begin
-            ss_tlast = 0; ss(Din_list[i]);
-        end
+        for(i=0;i<(data_length-1);i=i+1)
+            ss(Din_list[i]);
         config_read_check(12'h00, 32'h00, 32'h0000_000f); // check idle = 0
         ss_tlast = 1; ss(Din_list[(Data_Num-1)]);
+        @(posedge axis_clk); ss_tvalid = 0;
         $display("------End the data input(AXI-Stream)------");
     end
 
     integer k;
     reg error;
+    reg error_coef;
     reg status_error;
     initial begin
         error = 0; status_error = 0;
@@ -186,14 +188,15 @@ module fir_tb
         end
         config_read_check(12'h00, 32'h02, 32'h0000_0002); // check ap_done = 1 (0x00 [bit 1])
         config_read_check(12'h00, 32'h04, 32'h0000_0004); // check ap_idle = 1 (0x00 [bit 2])
-        if (error == 0 & error_coef == 0) begin
+        if (error === 0) begin// & error_coef === 0) begin
             $display("---------------------------------------------");
             $display("-----------Congratulations! Pass-------------");
+			$finish;
         end
         else begin
             $display("--------Simulation Failed---------");
+			$finish;
         end
-        $finish;
     end
 
     // Prevent hang
@@ -225,19 +228,20 @@ module fir_tb
 
     
     initial begin
-        error_coef = 0;
+        //error_coef = 0;
+        while(!axis_rst_n) @(posedge axis_clk);
+        rready <= 0; arvalid <= 0; //(modify) initialize the signal
+        wvalid <= 0; awvalid <= 0; //(modify) initialize the signal
         $display("----Start the coefficient input(AXI-lite)----");
         config_write(12'h10, data_length);
         for(k=0; k< Tape_Num; k=k+1) begin
-            config_write(12'h20+4*k, coef[k]);
+            config_write(12'h20+4*k, coef[k]); //(modify) according to address map (addr should be 12'h20, 12'h24..., and so on)
         end
-        awvalid <= 0; wvalid <= 0;
         // read-back and check
         $display(" Check Coefficient ...");
         for(k=0; k < Tape_Num; k=k+1) begin
-            config_read_check(12'h20+4*k, coef[k], 32'hffffffff);
+            config_read_check(12'h20+4*k, coef[k], 32'hffffffff); //(modify) according to address map (addr should be 12'h20, 12'h24..., and so on)
         end
-        arvalid <= 0;
         $display(" Tape programming done ...");
         $display(" Start FIR");
         @(posedge axis_clk) config_write(12'h00, 32'h0000_0001);    // ap_start = 1
@@ -248,12 +252,14 @@ module fir_tb
         input [11:0]    addr;
         input [31:0]    data;
         begin
-            awvalid <= 0; wvalid <= 0;
+            awvalid <= 1; awaddr <= addr;  //(modify) We don't have to wait awready, we can still assert the wvalid signal.
+            wvalid  <= 0;
+//            while (!awready) 
             @(posedge axis_clk);
-            awvalid <= 1; awaddr <= addr;
             wvalid  <= 1; wdata <= data;
             @(posedge axis_clk);
             while (!wready) @(posedge axis_clk);
+            wvalid  <= 0; awvalid <= 0;
         end
     endtask
 
@@ -262,15 +268,18 @@ module fir_tb
         input signed [31:0] exp_data;
         input [31:0]        mask;
         begin
-            arvalid <= 0;
+            arvalid <= 1; araddr <= addr;  //(modify) We don't have to wait arready, we can still assert the rready signal.
+            rready <= 0;
+//            while (!arready)  
             @(posedge axis_clk);
-            arvalid <= 1; araddr <= addr;
-            rready <= 1;
-            @(posedge axis_clk);
+            arvalid <= 1; rready <= 1;
             while (!rvalid) @(posedge axis_clk);
-            if( (rdata & mask) != (exp_data & mask)) begin
-                $display("ERROR: exp = %d, rdata = %d", exp_data, rdata);
-                error_coef <= 1;
+            //@(posedge axis_clk);
+            rready <= 0; arvalid <= 0;
+            if( (rdata & mask) !== (exp_data & mask)) begin
+                $display("ERROR coefficient: exp = %d, rdata = %d", exp_data, rdata);
+				$finish;
+                //error_coef <= 1;
             end else begin
                 $display("OK: exp = %d, rdata = %d", exp_data, rdata);
             end
@@ -285,9 +294,7 @@ module fir_tb
             ss_tvalid <= 1;
             ss_tdata  <= in1;
             @(posedge axis_clk);
-            while (!ss_tready) begin
-                @(posedge axis_clk);
-            end
+            while (!ss_tready) @(posedge axis_clk);
         end
     endtask
 
@@ -299,7 +306,7 @@ module fir_tb
             @(posedge axis_clk) 
             wait(sm_tvalid);
             while(!sm_tvalid) @(posedge axis_clk);
-            if (sm_tdata != in2) begin
+            if (sm_tdata !== in2) begin
                 $display("[ERROR] [Pattern %d] Golden answer: %d, Your answer: %d", pcnt, in2, sm_tdata);
                 error <= 1;
             end
@@ -310,3 +317,5 @@ module fir_tb
         end
     endtask
 endmodule
+
+
