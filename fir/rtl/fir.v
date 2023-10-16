@@ -84,7 +84,8 @@ localparam LITE_wfinish = 3'd1;
 localparam LITE_arready = 3'd2;
 localparam LITE_rreq = 3'd3;
 localparam LITE_read = 3'd4;
-reg [3-1:0] lite_state, next_lite_state;
+reg [3-1:0] lite_state;
+reg [3-1:0] next_lite_state;
 //axilite read module
 reg arready_reg, rvalid_reg;
 reg [(pADDR_WIDTH-1):0] araddr_buf;
@@ -238,31 +239,31 @@ always@*
     case(lite_state)
         LITE_idle:
             if(arvalid)
-                next_lite_state = LITE_arready;
+                next_lite_state = 3'd2;//LITE_arready;
             else if(wready_reg && awready_reg) 
-                next_lite_state = LITE_wfinish;
+                next_lite_state = 3'd1;//LITE_wfinish;
             else
-                next_lite_state = LITE_idle;
+                next_lite_state = 3'd0;//LITE_idle;
         LITE_wfinish:// by the time, axilite has already received awaddr and wdata 
-            next_lite_state = LITE_idle;
+            next_lite_state = 3'd0;//LITE_idle;
         LITE_arready:
             if(arready && arvalid)
-                next_lite_state = LITE_rreq;
+                next_lite_state = 3'd3;//LITE_rreq;
             else
-                next_lite_state = LITE_arready;
+                next_lite_state = 3'd2;//LITE_arready;
         LITE_rreq:
             if(rready)
-                next_lite_state = LITE_read;
+                next_lite_state = 3'd4;//LITE_read;
             else
-                next_lite_state = LITE_rreq;
+                next_lite_state = 3'd3;//LITE_rreq;
         LITE_read:
-            next_lite_state = LITE_idle;
+            next_lite_state = 3'd0;//LITE_idle;
         default:
-            next_lite_state = LITE_idle;
+            next_lite_state = 3'd0;
     endcase
 always@(posedge axis_clk or negedge axis_rst_n)
     if(~axis_rst_n)
-        lite_state <= LITE_idle;
+        lite_state <= 3'd0;
     else
         lite_state <= next_lite_state;
 //===axilite_to_config===
@@ -344,7 +345,7 @@ always@(posedge axis_clk or negedge axis_rst_n)
     else
         case(lite_state)
             LITE_idle:
-                if(awready)
+                if(awready & wready)
                     awaddr_buf <= awaddr;
                 else
                     awaddr_buf <= awaddr_buf;
