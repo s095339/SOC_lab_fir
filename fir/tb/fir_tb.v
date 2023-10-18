@@ -128,6 +128,7 @@ module fir_tb
 
     reg signed [(pDATA_WIDTH-1):0] Din_list[0:(Data_Num-1)];
     reg signed [(pDATA_WIDTH-1):0] golden_list[0:(Data_Num-1)];
+    reg test1=0;
 
     initial begin
         $dumpfile("fir.vcd");
@@ -191,11 +192,11 @@ module fir_tb
         if (error === 0) begin// & error_coef === 0) begin
             $display("---------------------------------------------");
             $display("-----------Congratulations! Pass-------------");
-			$finish;
+			//$finish;
         end
         else begin
             $display("--------Simulation Failed---------");
-			$finish;
+			//$finish;
         end
     end
 

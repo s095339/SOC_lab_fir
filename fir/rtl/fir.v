@@ -660,18 +660,18 @@ always@*
             fir_cfg_reg_wen = 1'b0;
         end
         STAT_FINISH:begin
-            fir_cfg_reg_in = 8'b0000_0000;
-            fir_cfg_reg_mask = 8'b0000_0000;
+            fir_cfg_reg_in = 8'b0000_0010;
+            fir_cfg_reg_mask = 8'b0000_0111;
             fir_cfg_reg_wen = 1'b1;
         end
         STAT_AP_DONE:begin //clean ap_done, set ap_idle
-            fir_cfg_reg_in = 8'b0000_0010;
-            fir_cfg_reg_mask = 8'b0000_0010;
+            fir_cfg_reg_in = 8'b0000_0100;
+            fir_cfg_reg_mask = 8'b0000_0111;
             fir_cfg_reg_wen = 1'b1;
         end
         STAT_AP_IDLE:begin
-            fir_cfg_reg_in = 8'b0000_0100;
-            fir_cfg_reg_mask = 8'b0000_0110;
+            fir_cfg_reg_in = 8'b0000_0000;
+            fir_cfg_reg_mask = 8'b0000_0000;
             fir_cfg_reg_wen = 1'b1;
         end
         default:begin
