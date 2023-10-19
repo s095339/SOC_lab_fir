@@ -1,5 +1,5 @@
 *.pptx
-*.log
+#*.log
 *.jou
 *.pb
 *.vcd
@@ -8,8 +8,8 @@
 ./fir/xsim.dir/
 ./fir/xsim.dir/*.*
 xsim.dir/
-./fir/*.log
-./fir/*.jou
-./fir/*.pb
-./fir/*.vcd
+/fir/*.log
+/fir/*.jou
+/fir/*.pb
+/fir/*.vcd
 
