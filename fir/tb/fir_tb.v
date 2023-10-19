@@ -128,7 +128,10 @@ module fir_tb
 
     reg signed [(pDATA_WIDTH-1):0] Din_list[0:(Data_Num-1)];
     reg signed [(pDATA_WIDTH-1):0] golden_list[0:(Data_Num-1)];
-    reg test1=0;
+    reg test1=1'b0;
+    reg test2=1'b0;
+
+    
 
     initial begin
         $dumpfile("fir.vcd");
@@ -174,6 +177,33 @@ module fir_tb
         ss_tlast = 1; ss(Din_list[(Data_Num-1)]);
         @(posedge axis_clk); ss_tvalid = 0;
         $display("------End the data input(AXI-Stream)------");
+
+        while(test1)@(posedge axis_clk);
+        @(posedge axis_clk);
+        //simulation 2
+        $display("------------Start simulation 2-----------");
+        ss_tvalid = 0; ss_tlast = 0; 
+        $display("----Start the data input(AXI-Stream)----");
+        for(i=0;i<(data_length-1);i=i+1)
+            ss(Din_list[i]);
+        config_read_check(12'h00, 32'h00, 32'h0000_000f); // check idle = 0
+        ss_tlast = 1; ss(Din_list[(Data_Num-1)]);
+        @(posedge axis_clk); ss_tvalid = 0;
+        $display("------End the data input(AXI-Stream)------");
+
+        while(test2)@(posedge axis_clk);
+        @(posedge axis_clk);
+        //simulation 3
+        $display("------------Start simulation 3-----------");
+        ss_tvalid = 0; ss_tlast = 0; 
+        $display("----Start the data input(AXI-Stream)----");
+        for(i=0;i<(data_length-1);i=i+1)
+            ss(Din_list[i]);
+        config_read_check(12'h00, 32'h00, 32'h0000_000f); // check idle = 0
+        ss_tlast = 1; ss(Din_list[(Data_Num-1)]);
+        @(posedge axis_clk); ss_tvalid = 0;
+        $display("------End the data input(AXI-Stream)------");
+
     end
 
     integer k;
@@ -193,11 +223,75 @@ module fir_tb
             $display("---------------------------------------------");
             $display("-----------Congratulations! Pass-------------");
 			//$finish;
+            
+            test1 = 1;
         end
         else begin
             $display("--------Simulation Failed---------");
 			//$finish;
+            
+            test1 = 1;
+            $finish;
         end
+
+        // simulation 2
+        wait(test1)@(posedge axis_clk);
+        @(posedge axis_clk) config_write(12'h00, 32'h0000_0001);
+
+        error = 0; status_error = 0;
+        sm_tready = 1;
+        wait (sm_tvalid);
+        for(k=0;k < data_length;k=k+1) begin
+            sm(golden_list[k],k);
+        end
+        config_read_check(12'h00, 32'h02, 32'h0000_0002); // check ap_done = 1 (0x00 [bit 1])
+        config_read_check(12'h00, 32'h04, 32'h0000_0004); // check ap_idle = 1 (0x00 [bit 2])
+        if (error === 0) begin// & error_coef === 0) begin
+            $display("---------------------------------------------");
+            $display("-----------Congratulations2! Pass-------------");
+			//$finish;
+            //sim_error = sim_error;
+            test2 = 1;
+        end
+        else begin
+            $display("--------Simulation Failed---------");
+			//$finish;
+            //sim_error = 1'b1;
+            test2 = 1;
+            $finish;
+        end
+
+        // simulation3
+
+        wait(test2)@(posedge axis_clk);
+        @(posedge axis_clk) config_write(12'h00, 32'h0000_0001);
+
+        error = 0; status_error = 0;
+        sm_tready = 1;
+        wait (sm_tvalid);
+        for(k=0;k < data_length;k=k+1) begin
+            sm(golden_list[k],k);
+        end
+        config_read_check(12'h00, 32'h02, 32'h0000_0002); // check ap_done = 1 (0x00 [bit 1])
+        config_read_check(12'h00, 32'h04, 32'h0000_0004); // check ap_idle = 1 (0x00 [bit 2])
+        if (error === 0) begin// & error_coef === 0) begin
+            $display("---------------------------------------------");
+            $display("-----------Congratulations3! Pass-------------");
+            //sim_error = sim_error;
+            //sim_finish = 1;
+			$finish;
+            
+        end
+        else begin
+            $display("--------Simulation Failed---------");
+            //sim_error = 1'b1;
+            //sim_finish = 1;
+			$finish;
+            
+        end
+
+        
+
     end
 
     // Prevent hang
@@ -247,6 +341,8 @@ module fir_tb
         $display(" Start FIR");
         @(posedge axis_clk) config_write(12'h00, 32'h0000_0001);    // ap_start = 1
         $display("----End the coefficient input(AXI-lite)----");
+
+
     end
 
     task config_write;

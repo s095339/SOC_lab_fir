@@ -18,4 +18,11 @@ Operation
 - Stream-in Xn. The rate is depending on the FIR processing speed. Use axi-stream valid/ready for flow control
 - Stream out Yn, the output rate depends on FIR processing speed.
 
-![圖片](https://github.com/ZheChen-Bill/lab3_workbook/assets/88698677/b5413f7f-7840-4c4a-85b5-eb66905cc60e)
+## waveform
+
+
+### configuration write
+### ap_start ap_done
+66060ns (6606 clk cycle)
+### Xn stream-in, and Yn stream_out
+

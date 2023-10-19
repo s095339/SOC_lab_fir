@@ -215,10 +215,7 @@ always@*
             else
                 next_state = STAT_AP_DONE;
         STAT_AP_IDLE:
-            if(rvalid)
-                next_state = STAT_IDLE;
-            else
-                next_state = STAT_AP_IDLE;
+            next_state = STAT_IDLE;
         default:
             next_state = STAT_IDLE;
     endcase
@@ -691,6 +688,8 @@ always@(posedge axis_clk or negedge axis_rst_n)
                 op_end <= op_end + 5'd1;
             else
                 op_end <= 5'd10;
+        else if (state == STAT_IDLE)
+            op_end <= 5'd0;
         else
             op_end <= op_end;
 always@(posedge axis_clk or negedge axis_rst_n)
