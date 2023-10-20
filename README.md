@@ -22,7 +22,15 @@ Operation
 
 
 ### configuration write
+write
+![Alt text](image-1.png)
+read back
+![Alt text](image-2.png)
 ### ap_start ap_done
-66060ns (6606 clk cycle)
+![Alt text](image.png)
+66020ns (6602 clk cycle)
 ### Xn stream-in, and Yn stream_out
-
+stream in
+![Alt text](image-3.png)
+stream out
+![Alt text](image-4.png)
