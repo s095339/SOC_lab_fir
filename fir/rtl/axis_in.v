@@ -108,9 +108,9 @@ always@*
         STRM_IDLE:
             strm_valid_reg_next = tready;
         STRM_WORK:
-            strm_valid_reg_next = fir_ready;
+            strm_valid_reg_next = tready & tvalid;//fir_ready;
         STRM_LAST:
-            strm_valid_reg_next = fir_ready;
+            strm_valid_reg_next = tready & tvalid;//fir_ready;
         default:
             strm_valid_reg_next = 1'b0;
     endcase
