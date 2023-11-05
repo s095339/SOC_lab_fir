@@ -15,7 +15,8 @@ module axis_out
     input wire tready,
 
     input wire clk,
-    input wire rst_n
+    input wire rst_n,
+    output wire outfinish
 );
 
     localparam STRM_IDLE = 0;
@@ -24,6 +25,8 @@ module axis_out
     reg [(pDATA_WIDTH-1):0] buff, buff_in;
     reg last_buff, last_buff_next;
     reg state, next_state;
+
+    assign outfinish = tready;
     always@*
         case(state)
             STRM_IDLE:

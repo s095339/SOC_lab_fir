@@ -399,10 +399,11 @@ module fir_tb
         input  signed [31:0] in2; // golden data
         input         [31:0] pcnt; // pattern count
         begin
-            sm_tready <= 1;
+            sm_tready = 0;
             @(posedge axis_clk) 
             wait(sm_tvalid);
             while(!sm_tvalid) @(posedge axis_clk);
+            sm_tready = 1;
             if (sm_tdata !== in2) begin
                 $display("[ERROR] [Pattern %d] Golden answer: %d, Your answer: %d", pcnt, in2, sm_tdata);
                 error <= 1;

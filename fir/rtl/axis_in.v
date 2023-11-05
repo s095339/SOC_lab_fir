@@ -19,7 +19,7 @@ module axis_in
     //signal
     output reg axis_finish, 
     input wire ap_start,
-
+    input wire outfinish,
     //clk rst
     input wire clk,
     input wire rst_n
@@ -78,7 +78,7 @@ always@*
         STRM_IDLE:
             tready_reg = ap_start;
         STRM_WORK:
-            tready_reg = fir_ready; // & strm_valid;
+            tready_reg = fir_ready & outfinish; // & strm_valid;
         default:
             tready_reg = 1'b0;
     endcase
@@ -108,9 +108,9 @@ always@*
         STRM_IDLE:
             strm_valid_reg_next = tready;
         STRM_WORK:
-            strm_valid_reg_next = tready & tvalid;//fir_ready;
+            strm_valid_reg_next = tready & tvalid ;//fir_ready;
         STRM_LAST:
-            strm_valid_reg_next = tready & tvalid;//fir_ready;
+            strm_valid_reg_next = tready & tvalid ;//fir_ready;
         default:
             strm_valid_reg_next = 1'b0;
     endcase

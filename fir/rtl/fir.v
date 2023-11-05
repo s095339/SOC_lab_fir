@@ -132,7 +132,8 @@ wire ap_idle, ap_done, ap_start;
 wire axis_finish;
 wire [(pDATA_WIDTH-1):0] strm_data;
 wire strm_valid;
-
+// axis_out to in
+wire outfinish; 
 
 // =====fir dataflow===== //
 // fir_dataflow_cfg_ctrl
@@ -194,8 +195,10 @@ always@*
             else
                 next_state = STAT_IDLE;
         STAT_STORE_1_INPUT:
-            next_state = STAT_CAL;
-        
+            if(strm_valid)
+                next_state = STAT_CAL;
+            else
+                next_state = STAT_STORE_1_INPUT;
         STAT_CAL:
         //TODO need modify
             if(one_input_finish & last_data_processing)
@@ -617,7 +620,7 @@ axis_in axisin(
     //signal
     .axis_finish(axis_finish), 
     .ap_start(ap_start),
-
+    .outfinish(outfinish),
     //clk rst
     .clk(axis_clk),
     .rst_n(axis_rst_n)
@@ -703,7 +706,10 @@ always@*
         STAT_IDLE:
             op_cnt_next = 0;
         STAT_STORE_1_INPUT:
-            op_cnt_next = op_cnt+5'd1;
+            if(strm_valid)
+                op_cnt_next = op_cnt+5'd1;
+            else
+                op_cnt_next = op_cnt;
         STAT_CAL:
             if(~equal_10_out)
                 op_cnt_next = op_cnt+5'd1;
@@ -729,7 +735,8 @@ always@(posedge axis_clk or negedge axis_rst_n)
         else
             fir_last <= 1'b0;
 //==========input handshake==========
-assign fir_ready = equal_10_out & ~strm_valid;
+assign fir_ready =(state == STAT_CAL)? equal_10_out & ~strm_valid:
+                  (state == STAT_STORE_1_INPUT)? ~strm_valid: 1'b0 ;
 //==========tap ram==========
 assign tap_ram_addr = (op_cnt<<2);
 assign tap_ram_out = tap_Do;
@@ -833,6 +840,8 @@ axis_out axisout(
     .tready(sm_tready),
 
     .clk(axis_clk),
-    .rst_n(axis_rst_n)
+    .rst_n(axis_rst_n),
+
+    .outfinish(outfinish)
 );
 endmodule
